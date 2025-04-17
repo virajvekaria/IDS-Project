@@ -1,0 +1,72 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data directories
+data/*
+!data/*/
+!data/*/.gitkeep
+data/diss.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+ENV/
+
+# Logs
+*.log
+document_processing.log
+*.log.*
+
+# Database files
+*.db
+*.sqlite3
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Test files
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary files
+*.bak
+*.tmp
+
+# Old script files
+1_extract_pdf.py
+2_chunk_text_old.py
+3_build_index.py
+4_query_qa.py
+4_query_qa_chat.py
+debug_db.py
+fix_nltk.py
+test_*.py
