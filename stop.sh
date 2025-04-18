@@ -6,7 +6,7 @@ echo "Stopping Document Intelligence Search System (DISS)..."
 # Check if the PID file exists
 if [ -f .diss.pid ]; then
     PID=$(cat .diss.pid)
-    
+
     # Check if the process is running
     if ps -p $PID > /dev/null; then
         # Kill the process
@@ -15,13 +15,13 @@ if [ -f .diss.pid ]; then
     else
         echo "Application is not running with PID $PID."
     fi
-    
+
     # Remove the PID file
     rm .diss.pid
 else
     # Try to find and kill the process by name
-    PIDS=$(pgrep -f "python run.py")
-    
+    PIDS=$(pgrep -f "python3 run.py")
+
     if [ -n "$PIDS" ]; then
         echo "Killing processes: $PIDS"
         kill $PIDS

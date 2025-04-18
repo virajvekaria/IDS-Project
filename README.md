@@ -11,6 +11,8 @@ A comprehensive document intelligence system that processes PDF documents, extra
 - **Adaptive Similarity Thresholds**: Dynamically adjusts similarity thresholds based on query complexity
 - **Hybrid Retrieval**: Combines semantic and keyword-based search for better results
 - **Chunk Overlap**: Ensures context continuity between document chunks
+- **React Frontend**: Modern, responsive user interface with streaming responses
+- **Streaming Responses**: See AI responses as they're generated in real-time
 
 ## System Architecture
 
@@ -22,12 +24,14 @@ The system consists of the following components:
 4. **Retrieval Engine**: Performs semantic search on document embeddings
 5. **Chat Interface**: Provides a conversational interface for document queries
 6. **Web API**: RESTful API for document management and search
+7. **React Frontend**: Modern, responsive user interface built with React
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.10 or higher
+- Node.js 16 or higher (for React frontend)
 - CUDA-compatible GPU (recommended)
 - Ollama installed for LLM support
 
@@ -39,27 +43,25 @@ The system consists of the following components:
    cd diss
    ```
 
-2. Install dependencies:
+2. Run the setup script:
    ```
-   pip install -r requirements.txt
+   ./setup.sh
    ```
+   This will install Python dependencies, check for Ollama, pull the required model, and verify Node.js installation.
 
-3. Install Ollama and pull the deepseek-r1:7b model:
+3. Build the React frontend:
    ```
-   ollama pull deepseek-r1:7b
+   ./build_react.sh
    ```
+   This will install Node.js dependencies and build the React frontend.
 
-4. Initialize the system with default documents:
+4. Start the application:
    ```
-   python init_documents.py
+   ./start.sh
    ```
+   This will start the backend server and open the application in your browser.
 
-5. Run the application:
-   ```
-   python run.py
-   ```
-
-6. Access the web interface at http://localhost:8000
+5. Access the web interface at http://localhost:8000
 
 ## Usage
 

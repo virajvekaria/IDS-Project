@@ -1,6 +1,7 @@
 """
 Retrieval module for searching and retrieving document chunks.
 """
+
 import os
 import json
 import re
@@ -30,7 +31,7 @@ class DocumentRetriever:
     ):
         """
         Initialize the document retriever.
-        
+
         Args:
             embedding_model: Name of the SentenceTransformer model to use for queries
             llm_model: Name of the LLM model to use for answer generation
@@ -44,10 +45,10 @@ class DocumentRetriever:
     def load_index(self, index_path: str) -> faiss.Index:
         """
         Load a FAISS index from disk.
-        
+
         Args:
             index_path: Path to the FAISS index file
-            
+
         Returns:
             FAISS index
         """
@@ -57,10 +58,10 @@ class DocumentRetriever:
     def load_metadata(self, metadata_path: str) -> List[Dict]:
         """
         Load chunk metadata from JSON file.
-        
+
         Args:
             metadata_path: Path to the metadata JSON file
-            
+
         Returns:
             List of chunk dictionaries
         """
@@ -73,11 +74,11 @@ class DocumentRetriever:
     ) -> Tuple[TfidfVectorizer, Any]:
         """
         Load keyword search components (TF-IDF vectorizer and matrix).
-        
+
         Args:
             vectorizer_path: Path to the pickled vectorizer
             tfidf_path: Path to the TF-IDF matrix
-            
+
         Returns:
             Tuple of (vectorizer, tfidf_matrix)
         """
@@ -93,10 +94,10 @@ class DocumentRetriever:
     def preprocess_query(self, query: str) -> str:
         """
         Preprocess query text for keyword search.
-        
+
         Args:
             query: Query text
-            
+
         Returns:
             Preprocessed query
         """
@@ -113,13 +114,13 @@ class DocumentRetriever:
     ) -> List[Tuple[int, float]]:
         """
         Perform keyword-based search using TF-IDF.
-        
+
         Args:
             query: Query text
             vectorizer: TF-IDF vectorizer
             tfidf_matrix: TF-IDF matrix
             top_k: Number of top results to return
-            
+
         Returns:
             List of (index, score) tuples
         """
@@ -154,7 +155,7 @@ class DocumentRetriever:
     ) -> List[Tuple[int, float]]:
         """
         Perform hybrid search combining vector and keyword search.
-        
+
         Args:
             query: Query text
             vector_index: FAISS index
@@ -162,13 +163,13 @@ class DocumentRetriever:
             tfidf_matrix: TF-IDF matrix (optional)
             vector_weight: Weight for vector scores (0.0-1.0)
             top_k: Number of top results to return
-            
+
         Returns:
             List of (index, score) tuples
         """
         # Use instance default if not provided
         vector_weight = vector_weight or self.vector_weight
-        
+
         # Encode query for vector search
         query_emb = self.embedder.encode([query], convert_to_numpy=True)
 
@@ -189,7 +190,9 @@ class DocumentRetriever:
             return vector_results[:top_k]
 
         # Keyword search
-        keyword_results = self.keyword_search(query, vectorizer, tfidf_matrix, top_k * 2)
+        keyword_results = self.keyword_search(
+            query, vectorizer, tfidf_matrix, top_k * 2
+        )
 
         # Combine results with weighted scores
         # Create dictionaries for easy lookup
@@ -215,23 +218,38 @@ class DocumentRetriever:
         combined_scores.sort(key=lambda x: x[1], reverse=True)
         return combined_scores[:top_k]
 
-    def generate_answer(self, question: str, retrieved_docs: List[Dict], model_name: Optional[str] = None) -> str:
+    def generate_answer(
+        self,
+        question: str,
+        retrieved_docs: List[Dict],
+        model_name: Optional[str] = None,
+        stream: bool = False,
+    ):
         """
         Generate an answer using an LLM based on retrieved documents.
-        
+
         Args:
             question: Question text
             retrieved_docs: List of retrieved document chunks
             model_name: Name of the LLM model to use (overrides instance default if provided)
-            
+            stream: Whether to stream the response
+
         Returns:
-            Generated answer
+            If stream=False: Generated answer as a string
+            If stream=True: Generator yielding response chunks
         """
         # Use instance default if not provided
         model_name = model_name or self.llm_model
-        
+
         if not retrieved_docs:
-            return "No relevant information found in the document."
+            if stream:
+
+                def empty_generator():
+                    yield "No relevant information found in the document."
+
+                return empty_generator()
+            else:
+                return "No relevant information found in the document."
 
         # Build context from retrieved docs
         context_text = ""
@@ -253,11 +271,24 @@ class DocumentRetriever:
         )
 
         # Generate answer using Ollama
-        response = ollama.chat(
-            model=model_name, messages=[{"role": "user", "content": prompt}]
-        )
+        if stream:
+            # Return a generator that yields response chunks
+            def response_generator():
+                for chunk in ollama.chat(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True,
+                ):
+                    if "message" in chunk and "content" in chunk["message"]:
+                        yield chunk["message"]["content"]
 
-        return response["message"]["content"].strip()
+            return response_generator()
+        else:
+            # Return the complete response
+            response = ollama.chat(
+                model=model_name, messages=[{"role": "user", "content": prompt}]
+            )
+            return response["message"]["content"].strip()
 
     def chat(
         self,
@@ -267,10 +298,11 @@ class DocumentRetriever:
         metadata_path: str,
         use_hybrid: bool = config.USE_HYBRID_SEARCH,
         top_k: int = 3,
-    ) -> Tuple[str, List[Dict]]:
+        stream: bool = False,
+    ):
         """
         Process a chat query and return an answer.
-        
+
         Args:
             query: Query text
             conversation_history: List of conversation history dictionaries
@@ -278,9 +310,11 @@ class DocumentRetriever:
             metadata_path: Path to the metadata JSON file
             use_hybrid: Whether to use hybrid search
             top_k: Number of top results to return
-            
+            stream: Whether to stream the response
+
         Returns:
-            Tuple of (answer, retrieved_docs)
+            If stream=False: Tuple of (answer, retrieved_docs)
+            If stream=True: Tuple of (generator yielding response chunks, retrieved_docs)
         """
         # 1) Load index and metadata
         vector_index = self.load_index(index_path)
@@ -362,14 +396,28 @@ class DocumentRetriever:
             "Assistant:"
         )
 
-        response = ollama.chat(
-            model=self.llm_model, 
-            messages=[{"role": "user", "content": prompt}],
-        )
+        if stream:
+            # Return a generator that yields response chunks
+            def response_generator():
+                for chunk in ollama.chat(
+                    model=self.llm_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True,
+                ):
+                    if "message" in chunk and "content" in chunk["message"]:
+                        yield chunk["message"]["content"]
 
-        answer = response["message"]["content"].strip()
+            return response_generator(), retrieved_docs
+        else:
+            # Return the complete response
+            response = ollama.chat(
+                model=self.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
 
-        return answer, retrieved_docs
+            answer = response["message"]["content"].strip()
+
+            return answer, retrieved_docs
 
     def search(
         self,
@@ -378,19 +426,22 @@ class DocumentRetriever:
         metadata_path: str,
         use_hybrid: bool = config.USE_HYBRID_SEARCH,
         top_k: int = 5,
-    ) -> Tuple[List[Dict], str]:
+        stream: bool = False,
+    ):
         """
         Search for documents and generate an answer.
-        
+
         Args:
             query: Query text
             index_path: Path to the FAISS index file
             metadata_path: Path to the metadata JSON file
             use_hybrid: Whether to use hybrid search
             top_k: Number of top results to return
-            
+            stream: Whether to stream the response
+
         Returns:
-            Tuple of (retrieved_docs, answer)
+            If stream=False: Tuple of (retrieved_docs, answer)
+            If stream=True: Tuple of (retrieved_docs, generator yielding response chunks)
         """
         # 1) Load index and metadata
         vector_index = self.load_index(index_path)
@@ -447,6 +498,11 @@ class DocumentRetriever:
                 retrieved_docs.append(doc_meta)
 
         # 4) Generate answer
-        answer = self.generate_answer(query, retrieved_docs)
-
-        return retrieved_docs, answer
+        if stream:
+            # Return a generator that yields response chunks
+            answer_generator = self.generate_answer(query, retrieved_docs, stream=True)
+            return retrieved_docs, answer_generator
+        else:
+            # Return the complete response
+            answer = self.generate_answer(query, retrieved_docs)
+            return retrieved_docs, answer

@@ -38,7 +38,36 @@ ollama pull deepseek-r1:7b
 echo "Creating necessary directories..."
 mkdir -p data/documents data/processed data/indexes
 
+# Check if Node.js is installed
+if ! command -v node &> /dev/null; then
+    echo "Node.js is not installed. It's required for the React frontend."
+    echo "Please install Node.js 16 or higher from https://nodejs.org/"
+    echo "After installing Node.js, run this script again."
+    exit 1
+fi
+
+# Check Node.js version
+node_version=$(node --version | cut -c 2-)
+node_major=$(echo $node_version | cut -d. -f1)
+
+if [ "$node_major" -lt 16 ]; then
+    echo "Node.js 16 or higher is required. You have Node.js $node_version."
+    exit 1
+fi
+
+# Check if npm is installed
+if ! command -v npm &> /dev/null; then
+    echo "npm is not installed. It's required for the React frontend."
+    echo "Please install npm along with Node.js from https://nodejs.org/"
+    echo "After installing npm, run this script again."
+    exit 1
+fi
+
 # Make scripts executable
-chmod +x start.sh stop.sh
+chmod +x start.sh stop.sh build_react.sh
+
+# Build the React frontend
+echo "Building the React frontend..."
+./build_react.sh
 
 echo "Setup complete! You can now run the application with ./start.sh"

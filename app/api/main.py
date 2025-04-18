@@ -1,15 +1,14 @@
 """
 Main FastAPI application for the Document Intelligence Search System (DISS).
 """
-import os
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
 
-from app.api.models.database import Base, engine, get_db
-from app.api.routes import documents, search, conversations, indexes
+import os
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.models.database import Base, engine
+from app.api.routes import documents, search, conversations, indexes, frontend
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -21,33 +20,25 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static")
-
-# Set up templates
-templates = Jinja2Templates(directory="app/frontend/templates")
 
 # Include routers
 app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(conversations.router)
 app.include_router(indexes.router)
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request, db: Session = Depends(get_db)):
-    """
-    Render the index page.
-    """
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/chat", response_class=HTMLResponse)
-async def chat(request: Request, conversation_id: int = None, db: Session = Depends(get_db)):
-    """
-    Render the chat page.
-    """
-    return templates.TemplateResponse("chat.html", {"request": request, "conversation_id": conversation_id})
+app.include_router(frontend.router)
 
 
 @app.get("/health")
