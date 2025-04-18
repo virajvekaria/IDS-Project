@@ -54,8 +54,13 @@ export const sendStreamingMessage = async (conversationId, message, onChunk, onC
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to send message');
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to send message');
+      } catch (jsonError) {
+        // If the response is not JSON, use the status text
+        throw new Error(`Failed to send message: ${response.status} ${response.statusText}`);
+      }
     }
 
     // Check if we got a streaming response

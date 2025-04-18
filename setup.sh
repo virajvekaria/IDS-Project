@@ -31,8 +31,8 @@ if ! command -v ollama &> /dev/null; then
 fi
 
 # Pull the llama3 model
-echo "Pulling the llama3 model (this may take a while)..."
-ollama pull llama3
+echo "Pulling the llama3 8B model (this may take a while)..."
+ollama pull llama3:8b
 
 # Create necessary directories
 echo "Creating necessary directories..."

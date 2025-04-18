@@ -177,7 +177,9 @@ const ChatPage = () => {
           // On error
           (error) => {
             console.error('Error in streaming:', error);
-            setError('Failed to get response');
+            setError(`Failed to get response: ${error.message}`);
+            // Remove the last message (the empty assistant message)
+            setMessages(prev => prev.slice(0, -1));
             setLoading(false);
           }
         );

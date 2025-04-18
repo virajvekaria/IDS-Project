@@ -213,11 +213,13 @@ def chat(
     )
 
     # Convert references to dict for serialization
-    reference_dicts = (
-        [ref.dict() for ref in references]
-        if hasattr(references[0], "dict")
-        else references
-    )
+    reference_dicts = []
+    if references and len(references) > 0:
+        reference_dicts = (
+            [ref.dict() for ref in references]
+            if hasattr(references[0], "dict")
+            else references
+        )
 
     if stream:
         # Return a streaming response
