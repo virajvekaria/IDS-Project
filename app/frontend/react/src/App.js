@@ -21,35 +21,44 @@ const App = () => {
 
   return (
     <div className="app-container">
-      <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
+      <nav className="navbar navbar-expand-lg navbar-dark">
         <div className="container">
-          <Link className="navbar-brand" to="/">DISS</Link>
+          <Link className="navbar-brand" to="/">
+            <i className="bi bi-search-heart me-2"></i>
+            DISS
+          </Link>
           <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span className="navbar-toggler-icon"></span>
           </button>
           <div className="collapse navbar-collapse" id="navbarNav">
-            <ul className="navbar-nav">
-              <li className="nav-item">
-                <Link className="nav-link" to="/">Home</Link>
+            <ul className="navbar-nav ms-auto">
+              <li className="nav-item mx-1">
+                <Link className="nav-link" to="/">
+                  <i className="bi bi-house me-1"></i> Home
+                </Link>
               </li>
-              <li className="nav-item">
-                <Link className="nav-link" to="/chat">Chat</Link>
+              <li className="nav-item mx-1">
+                <Link className="nav-link" to="/chat">
+                  <i className="bi bi-chat-dots me-1"></i> Chat
+                </Link>
               </li>
-              <li className="nav-item">
-                <Link className="nav-link" to="/documents">Documents</Link>
+              <li className="nav-item mx-1">
+                <Link className="nav-link" to="/documents">
+                  <i className="bi bi-file-earmark-text me-1"></i> Documents
+                </Link>
               </li>
             </ul>
           </div>
         </div>
       </nav>
 
-      <div className="container mt-4">
+      <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
         </Routes>
-      </div>
+      </main>
     </div>
   );
 };
