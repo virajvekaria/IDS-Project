@@ -6,11 +6,7 @@ const Message = ({ role, content, references = [] }) => {
   // Format content with line breaks
   const formattedContent = content.replace(/\n/g, '<br>');
 
-  // Check if the content actually contains citations
-  const hasCitations = content.includes('(Page ') || content.includes('(page ');
-
-  // Only show references if there are citations in the content or if we have references
-  // We'll always show references for assistant messages with references, even if no citations in text
+  // Always show references for assistant messages with references
   const shouldShowReferences = role === 'assistant' && references && references.length > 0;
 
   // Toggle reference expansion
@@ -29,7 +25,7 @@ const Message = ({ role, content, references = [] }) => {
       {shouldShowReferences && (
         <div className="message-references">
           <div className="sources-header">
-            <strong>Sources Used:</strong> {!hasCitations && <span className="citation-warning">(No explicit citations in response)</span>}
+            <strong>Sources Used:</strong>
           </div>
           <div className="reference-list">
             {references.map((ref, index) => (

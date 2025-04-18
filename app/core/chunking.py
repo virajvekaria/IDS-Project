@@ -6,10 +6,15 @@ import json
 import os
 import re
 import numpy as np
+import torch
+import logging
 from typing import List, Dict, Tuple, Optional
 
 from sentence_transformers import SentenceTransformer, util
 import nltk
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Ensure NLTK data is downloaded
 try:
@@ -63,9 +68,53 @@ class DocumentChunker:
             overlap: Number of sentences to overlap between chunks
         """
         self.model_name = embedding_model
-        self.model = SentenceTransformer(embedding_model, device="cuda")
         self.chunk_size = chunk_size
         self.overlap = overlap
+
+        # Determine device based on available resources
+        self.device = self._get_optimal_device()
+        logger.info(f"Using device: {self.device} for document chunking")
+
+        # Initialize the embedding model on the appropriate device
+        try:
+            self.model = SentenceTransformer(embedding_model, device=self.device)
+            logger.info(
+                f"Successfully loaded embedding model {embedding_model} on {self.device}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to load model on {self.device}, falling back to CPU: {e}"
+            )
+            self.device = "cpu"
+            self.model = SentenceTransformer(embedding_model, device=self.device)
+
+    def _get_optimal_device(self) -> str:
+        """
+        Determine the optimal device (CUDA/CPU) based on available resources.
+
+        Returns:
+            String representing the device to use ('cuda:0', 'cpu', etc.)
+        """
+        if torch.cuda.is_available():
+            # Check available GPU memory
+            try:
+                total_memory = torch.cuda.get_device_properties(0).total_memory
+                allocated_memory = torch.cuda.memory_allocated(0)
+                free_memory = total_memory - allocated_memory
+
+                # If we have at least 500MB free, use GPU
+                if free_memory > 500 * 1024 * 1024:  # 500MB in bytes
+                    return "cuda:0"
+                else:
+                    logger.warning(
+                        f"Insufficient GPU memory: {free_memory/1024/1024:.2f}MB free, falling back to CPU"
+                    )
+                    return "cpu"
+            except Exception as e:
+                logger.warning(f"Error checking GPU memory: {e}, falling back to CPU")
+                return "cpu"
+        else:
+            return "cpu"
 
     def combine_page_text_and_tables(self, page_data: Dict) -> str:
         """
@@ -160,7 +209,18 @@ class DocumentChunker:
             return []
 
         # Encode all sentences at once for efficiency
-        embeddings = self.model.encode(sentences, convert_to_tensor=True)
+        try:
+            embeddings = self.model.encode(sentences, convert_to_tensor=True)
+        except Exception as e:
+            logger.warning(
+                f"Error during encoding with {self.device}, falling back to CPU: {e}"
+            )
+            # Fall back to CPU if there's an error
+            old_device = self.device
+            self.device = "cpu"
+            self.model = SentenceTransformer(self.model_name, device=self.device)
+            logger.info(f"Switched from {old_device} to {self.device} due to error")
+            embeddings = self.model.encode(sentences, convert_to_tensor=True)
 
         # Calculate adaptive threshold based on document characteristics
         similarity_threshold = self.calculate_adaptive_threshold(sentences, embeddings)

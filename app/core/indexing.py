@@ -8,6 +8,8 @@ import re
 import time
 import pickle
 import numpy as np
+import torch
+import logging
 from typing import List, Dict, Tuple, Any, Optional
 
 import faiss
@@ -16,6 +18,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import save_npz, load_npz
 
 import config
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class DocumentIndexer:
@@ -40,6 +45,38 @@ class DocumentIndexer:
         self.embedding_model = embedding_model
         self.index_type = index_type
         self.use_hybrid = use_hybrid
+
+        # Determine device based on available resources
+        self.device = self._get_optimal_device()
+        logger.info(f"Using device: {self.device} for document indexing")
+
+    def _get_optimal_device(self) -> str:
+        """
+        Determine the optimal device (CUDA/CPU) based on available resources.
+
+        Returns:
+            String representing the device to use ('cuda:0', 'cpu', etc.)
+        """
+        if torch.cuda.is_available():
+            # Check available GPU memory
+            try:
+                total_memory = torch.cuda.get_device_properties(0).total_memory
+                allocated_memory = torch.cuda.memory_allocated(0)
+                free_memory = total_memory - allocated_memory
+
+                # If we have at least 500MB free, use GPU
+                if free_memory > 500 * 1024 * 1024:  # 500MB in bytes
+                    return "cuda:0"
+                else:
+                    logger.warning(
+                        f"Insufficient GPU memory: {free_memory/1024/1024:.2f}MB free, falling back to CPU"
+                    )
+                    return "cpu"
+            except Exception as e:
+                logger.warning(f"Error checking GPU memory: {e}, falling back to CPU")
+                return "cpu"
+        else:
+            return "cpu"
 
     def load_chunks(self, chunks_json: str) -> List[Dict]:
         """
@@ -173,9 +210,19 @@ class DocumentIndexer:
 
         # 3) Create vector embeddings
         print("Creating vector embeddings...")
-        # Sequential embedding generation using GPU
-        model = SentenceTransformer(self.embedding_model, device="cuda")
-        embeddings = self.batch_encode(model, texts)
+        # Sequential embedding generation using the optimal device
+        try:
+            model = SentenceTransformer(self.embedding_model, device=self.device)
+            logger.info(f"Using {self.device} for embedding generation")
+            embeddings = self.batch_encode(model, texts)
+        except Exception as e:
+            logger.warning(
+                f"Error using {self.device} for embeddings: {e}, falling back to CPU"
+            )
+            self.device = "cpu"
+            model = SentenceTransformer(self.embedding_model, device=self.device)
+            logger.info(f"Switched to {self.device} for embedding generation")
+            embeddings = self.batch_encode(model, texts)
 
         print(f"Created embeddings with shape: {embeddings.shape}")
 
@@ -262,8 +309,18 @@ class DocumentIndexer:
 
         # 3) Create embeddings for new chunks
         print(f"Creating embeddings for {len(new_texts)} new chunks...")
-        model = SentenceTransformer(self.embedding_model, device="cuda")
-        new_embeddings = self.batch_encode(model, new_texts)
+        try:
+            model = SentenceTransformer(self.embedding_model, device=self.device)
+            logger.info(f"Using {self.device} for embedding generation")
+            new_embeddings = self.batch_encode(model, new_texts)
+        except Exception as e:
+            logger.warning(
+                f"Error using {self.device} for embeddings: {e}, falling back to CPU"
+            )
+            self.device = "cpu"
+            model = SentenceTransformer(self.embedding_model, device=self.device)
+            logger.info(f"Switched to {self.device} for embedding generation")
+            new_embeddings = self.batch_encode(model, new_texts)
 
         # 4) Add new embeddings to the index
         vector_index.add(new_embeddings)
