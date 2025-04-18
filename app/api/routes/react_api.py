@@ -8,6 +8,12 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+
+class MessageUpdateRequest(BaseModel):
+    content: str
+
 
 import config
 
@@ -181,6 +187,33 @@ def get_conversation_messages(
         db, conversation_id=conversation_id, skip=skip, limit=limit
     )
     return messages
+
+
+@router.put("/conversations/{conversation_id}/messages/{message_id}")
+def update_message(
+    conversation_id: int,
+    message_id: int,
+    message_update: MessageUpdateRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Update a message's content for React frontend.
+    """
+    # Verify the conversation exists
+    conversation = ConversationService.get_conversation(
+        db, conversation_id=conversation_id
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Update the message content
+    updated_message = ConversationService.update_message_content(
+        db, message_id=message_id, content=message_update.content
+    )
+    if updated_message is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    return {"id": updated_message.id, "content": updated_message.content}
 
 
 @router.post("/chat")

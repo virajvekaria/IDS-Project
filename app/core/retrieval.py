@@ -6,16 +6,21 @@ import os
 import json
 import re
 import pickle
+import logging
 from typing import List, Dict, Tuple, Any, Optional
 
 import faiss
 import numpy as np
+import torch
 from sentence_transformers import SentenceTransformer, util
 from scipy.sparse import load_npz
 from sklearn.feature_extraction.text import TfidfVectorizer
 import ollama
 
 import config
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class DocumentRetriever:
@@ -40,7 +45,51 @@ class DocumentRetriever:
         self.embedding_model = embedding_model
         self.llm_model = llm_model
         self.vector_weight = vector_weight
-        self.embedder = SentenceTransformer(embedding_model)
+
+        # Determine device based on available resources
+        self.device = self._get_optimal_device()
+        logger.info(f"Using device: {self.device} for embeddings")
+
+        # Initialize the embedding model on the appropriate device
+        try:
+            self.embedder = SentenceTransformer(embedding_model, device=self.device)
+            logger.info(
+                f"Successfully loaded embedding model {embedding_model} on {self.device}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to load model on {self.device}, falling back to CPU: {e}"
+            )
+            self.device = "cpu"
+            self.embedder = SentenceTransformer(embedding_model, device=self.device)
+
+    def _get_optimal_device(self) -> str:
+        """
+        Determine the optimal device (CUDA/CPU) based on available resources.
+
+        Returns:
+            String representing the device to use ('cuda:0', 'cpu', etc.)
+        """
+        if torch.cuda.is_available():
+            # Check available GPU memory
+            try:
+                total_memory = torch.cuda.get_device_properties(0).total_memory
+                allocated_memory = torch.cuda.memory_allocated(0)
+                free_memory = total_memory - allocated_memory
+
+                # If we have at least 500MB free, use GPU
+                if free_memory > 500 * 1024 * 1024:  # 500MB in bytes
+                    return "cuda:0"
+                else:
+                    logger.warning(
+                        f"Insufficient GPU memory: {free_memory/1024/1024:.2f}MB free, falling back to CPU"
+                    )
+                    return "cpu"
+            except Exception as e:
+                logger.warning(f"Error checking GPU memory: {e}, falling back to CPU")
+                return "cpu"
+        else:
+            return "cpu"
 
     def load_index(self, index_path: str) -> faiss.Index:
         """
@@ -171,7 +220,20 @@ class DocumentRetriever:
         vector_weight = vector_weight or self.vector_weight
 
         # Encode query for vector search
-        query_emb = self.embedder.encode([query], convert_to_numpy=True)
+        try:
+            query_emb = self.embedder.encode([query], convert_to_numpy=True)
+        except Exception as e:
+            logger.warning(
+                f"Error during encoding with {self.device}, falling back to CPU: {e}"
+            )
+            # Fall back to CPU if there's an error
+            old_device = self.device
+            self.device = "cpu"
+            self.embedder = SentenceTransformer(
+                self.embedding_model, device=self.device
+            )
+            logger.info(f"Switched from {old_device} to {self.device} due to error")
+            query_emb = self.embedder.encode([query], convert_to_numpy=True)
 
         # Vector search
         vector_k = min(top_k * 2, vector_index.ntotal)  # Get more results for reranking
@@ -266,7 +328,7 @@ class DocumentRetriever:
             f"- Provide a concise and clear answer.\n"
             f"- Cite page numbers explicitly in parentheses like this: (Page X).\n"
             f"- If multiple ideas come from different pages, cite them separately.\n"
-            f"- Do not invent information not in the context.\n"
+            f"- Do NOT invent information not in the context.\n"
             f"- Start your response directly with the answer.\n\n"
             f"Answer:"
         )
@@ -360,8 +422,22 @@ class DocumentRetriever:
                 retrieved_docs.append(doc_meta)
         else:
             # Vector-only search
-            query_emb = self.embedder.encode([query], convert_to_numpy=True)
-            distances, indices = vector_index.search(query_emb, top_k)
+            try:
+                query_emb = self.embedder.encode([query], convert_to_numpy=True)
+                distances, indices = vector_index.search(query_emb, top_k)
+            except Exception as e:
+                logger.warning(
+                    f"Error during vector search with {self.device}, falling back to CPU: {e}"
+                )
+                # Fall back to CPU if there's an error
+                old_device = self.device
+                self.device = "cpu"
+                self.embedder = SentenceTransformer(
+                    self.embedding_model, device=self.device
+                )
+                logger.info(f"Switched from {old_device} to {self.device} due to error")
+                query_emb = self.embedder.encode([query], convert_to_numpy=True)
+                distances, indices = vector_index.search(query_emb, top_k)
 
             retrieved_docs = []
             for dist, idx in zip(distances[0], indices[0]):
@@ -392,18 +468,40 @@ class DocumentRetriever:
             doc.get("score", 0) > 0.5 for doc in retrieved_docs
         )
 
-        if has_relevant_docs:
+        # Determine if the query is likely document-related or just conversational
+        # Simple conversational queries like greetings, thanks, etc.
+        simple_conversational = len(query.split()) <= 3 and any(
+            word in query.lower()
+            for word in [
+                "hi",
+                "hello",
+                "hey",
+                "thanks",
+                "thank",
+                "bye",
+                "goodbye",
+                "ok",
+                "okay",
+                "yes",
+                "no",
+            ]
+        )
+
+        # For document-related queries or when we have relevant docs and it's not a simple greeting
+        if has_relevant_docs and not simple_conversational:
             prompt = (
                 "You are a helpful assistant. You have the following conversation history and context.\n\n"
                 f"Conversation:\n{conversation_text}"
                 f"Relevant Document Chunks:\n{context_text}"
                 "Please answer the user's latest question based on the conversation history and document context.\n\n"
                 "Guidelines:\n"
-                "1. If the question is about the documents, use ONLY information from the provided document chunks.\n"
-                "2. Cite page numbers in parentheses like (Page X) when referencing document content.\n"
-                "3. If the question is conversational and not related to the documents, respond naturally without referencing the documents.\n"
-                "4. Keep your answers concise and to the point.\n"
-                "5. Start your response directly with the answer.\n\n"
+                "1. IMPORTANT: You MUST cite page numbers when you are using information from the documents.\n"
+                "2. When citing, use the format (Page X) immediately after the information from that page.\n"
+                "3. Be very explicit with citations - every fact or piece of information from the documents needs a citation.\n"
+                "4. If the question is conversational and not about the documents, respond naturally without citations.\n"
+                "5. For simple greetings or conversational exchanges, respond naturally without any citations.\n"
+                "6. Keep your answers concise and to the point.\n"
+                "7. Start your response directly with the answer.\n\n"
                 "Assistant:"
             )
         else:
@@ -510,8 +608,22 @@ class DocumentRetriever:
                 retrieved_docs.append(doc_meta)
         else:
             # Vector-only search
-            query_emb = self.embedder.encode([query], convert_to_numpy=True)
-            distances, indices = vector_index.search(query_emb, top_k)
+            try:
+                query_emb = self.embedder.encode([query], convert_to_numpy=True)
+                distances, indices = vector_index.search(query_emb, top_k)
+            except Exception as e:
+                logger.warning(
+                    f"Error during vector search with {self.device}, falling back to CPU: {e}"
+                )
+                # Fall back to CPU if there's an error
+                old_device = self.device
+                self.device = "cpu"
+                self.embedder = SentenceTransformer(
+                    self.embedding_model, device=self.device
+                )
+                logger.info(f"Switched from {old_device} to {self.device} due to error")
+                query_emb = self.embedder.encode([query], convert_to_numpy=True)
+                distances, indices = vector_index.search(query_emb, top_k)
 
             retrieved_docs = []
             for dist, idx in zip(distances[0], indices[0]):

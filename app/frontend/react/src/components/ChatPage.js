@@ -9,7 +9,8 @@ import {
   getMessages,
   deleteConversation,
   sendMessage,
-  sendStreamingMessage
+  sendStreamingMessage,
+  updateMessage
 } from '../services/api';
 
 const ChatPage = () => {
@@ -162,7 +163,22 @@ const ChatPage = () => {
             });
           },
           // On complete
-          (result) => {
+          async (result) => {
+            // Get the last message ID from the database
+            const messages = await getMessages(activeConversationId);
+            const lastMessage = messages[messages.length - 1];
+
+            if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === '[Streaming response]') {
+              // Update the message in the database
+              try {
+                await updateMessage(activeConversationId, lastMessage.id, result.message);
+                console.log('Updated message in database');
+              } catch (err) {
+                console.error('Failed to update message in database:', err);
+              }
+            }
+
+            // Update the UI
             setMessages(prev => {
               const newMessages = [...prev];
               newMessages[newMessages.length - 1] = {

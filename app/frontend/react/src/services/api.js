@@ -24,6 +24,13 @@ export const getMessages = async (conversationId) => {
   return response.data;
 };
 
+export const updateMessage = async (conversationId, messageId, content) => {
+  const response = await api.put(`/react-api/conversations/${conversationId}/messages/${messageId}`, {
+    content
+  });
+  return response.data;
+};
+
 export const deleteConversation = async (conversationId) => {
   const response = await api.delete(`/conversations/${conversationId}`);
   return response.data;
@@ -157,6 +164,7 @@ export default {
   getConversations,
   createConversation,
   getMessages,
+  updateMessage,
   deleteConversation,
   sendMessage,
   sendStreamingMessage,
