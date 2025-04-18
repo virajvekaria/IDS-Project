@@ -24,7 +24,12 @@ var/
 data/*
 !data/*/
 !data/*/.gitkeep
+!data/documents/attentionisallyouneed.pdf
 data/diss.db
+data/indexes/*
+!data/indexes/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 
 # IDE files
 .idea/
@@ -43,7 +48,11 @@ ENV/
 # Logs
 *.log
 document_processing.log
+diss.log
 *.log.*
+
+# PID files
+.diss.pid
 
 # Database files
 *.db
@@ -61,12 +70,3 @@ htmlcov/
 *.bak
 *.tmp
 
-# Old script files
-1_extract_pdf.py
-2_chunk_text_old.py
-3_build_index.py
-4_query_qa.py
-4_query_qa_chat.py
-debug_db.py
-fix_nltk.py
-test_*.py

@@ -30,9 +30,9 @@ if ! command -v ollama &> /dev/null; then
     exit 1
 fi
 
-# Pull the deepseek model
-echo "Pulling the deepseek-r1:7b model (this may take a while)..."
-ollama pull deepseek-r1:7b
+# Pull the llama3 model
+echo "Pulling the llama3 model (this may take a while)..."
+ollama pull llama3
 
 # Create necessary directories
 echo "Creating necessary directories..."

@@ -20,7 +20,7 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
-  const [streamingEnabled, setStreamingEnabled] = useState(false);
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
 
   // Load conversations
   const loadConversations = useCallback(async () => {

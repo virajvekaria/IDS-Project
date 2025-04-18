@@ -81,7 +81,7 @@ The system consists of the following components:
 
 The system can be configured by modifying the `config.py` file:
 
-- `DEFAULT_LLM_MODEL`: The default Ollama model to use (default: "deepseek-r1:7b")
+- `DEFAULT_LLM_MODEL`: The default Ollama model to use (default: "llama3")
 - `CHUNK_SIZE`: The size of document chunks (default: 1000)
 - `CHUNK_OVERLAP`: The overlap between chunks (default: 200)
 - `SIMILARITY_THRESHOLD`: The default similarity threshold (default: 0.7)

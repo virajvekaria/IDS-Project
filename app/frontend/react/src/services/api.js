@@ -10,7 +10,7 @@ const api = axios.create({
 
 // Conversations API
 export const getConversations = async () => {
-  const response = await api.get('/conversations');
+  const response = await api.get('/react-api/conversations');
   return response.data;
 };
 
@@ -20,7 +20,7 @@ export const createConversation = async () => {
 };
 
 export const getMessages = async (conversationId) => {
-  const response = await api.get(`/conversations/${conversationId}/messages`);
+  const response = await api.get(`/react-api/conversations/${conversationId}/messages`);
   return response.data;
 };
 
@@ -31,7 +31,7 @@ export const deleteConversation = async (conversationId) => {
 
 // Chat API
 export const sendMessage = async (conversationId, message) => {
-  const response = await api.post('/search/chat', {
+  const response = await api.post('/react-api/chat', {
     conversation_id: conversationId,
     message
   });
@@ -41,7 +41,7 @@ export const sendMessage = async (conversationId, message) => {
 // Streaming chat API
 export const sendStreamingMessage = async (conversationId, message, onChunk, onComplete, onError) => {
   try {
-    const response = await fetch('/search/chat?stream=true', {
+    const response = await fetch('/react-api/chat?stream=true', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,7 +117,34 @@ export const sendStreamingMessage = async (conversationId, message, onChunk, onC
 
 // Documents API
 export const getDocuments = async () => {
-  const response = await api.get('/documents');
+  const response = await api.get('/react-api/documents');
+  return response.data;
+};
+
+export const uploadDocument = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch('/react-api/documents/upload', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    try {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to upload document');
+    } catch (jsonError) {
+      // If the response is not JSON, use the status text
+      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  return response.json();
+};
+
+export const deleteDocument = async (documentId) => {
+  const response = await api.delete(`/react-api/documents/${documentId}`);
   return response.data;
 };
 
@@ -128,5 +155,7 @@ export default {
   deleteConversation,
   sendMessage,
   sendStreamingMessage,
-  getDocuments
+  getDocuments,
+  uploadDocument,
+  deleteDocument
 };

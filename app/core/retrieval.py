@@ -266,7 +266,8 @@ class DocumentRetriever:
             f"- Provide a concise and clear answer.\n"
             f"- Cite page numbers explicitly in parentheses like this: (Page X).\n"
             f"- If multiple ideas come from different pages, cite them separately.\n"
-            f"- Do not invent information not in the context.\n\n"
+            f"- Do not invent information not in the context.\n"
+            f"- Start your response directly with the answer.\n\n"
             f"Answer:"
         )
 
@@ -386,15 +387,38 @@ class DocumentRetriever:
         conversation_text += f"User: {query}\n\n"
 
         # 5) Generate answer
-        prompt = (
-            "You are a helpful assistant. You have the following conversation history and context.\n\n"
-            f"Conversation:\n{conversation_text}"
-            f"Relevant Document Chunks:\n{context_text}"
-            "Please use ONLY the above conversation and relevant document chunks to answer the user's latest question.\n"
-            "Cite the page numbers when providing information from the documents. "
-            "If the information is not in the documents, say you don't have that data.\n\n"
-            "Assistant:"
+        # Check if there are any relevant documents
+        has_relevant_docs = len(retrieved_docs) > 0 and any(
+            doc.get("score", 0) > 0.5 for doc in retrieved_docs
         )
+
+        if has_relevant_docs:
+            prompt = (
+                "You are a helpful assistant. You have the following conversation history and context.\n\n"
+                f"Conversation:\n{conversation_text}"
+                f"Relevant Document Chunks:\n{context_text}"
+                "Please answer the user's latest question based on the conversation history and document context.\n\n"
+                "Guidelines:\n"
+                "1. If the question is about the documents, use ONLY information from the provided document chunks.\n"
+                "2. Cite page numbers in parentheses like (Page X) when referencing document content.\n"
+                "3. If the question is conversational and not related to the documents, respond naturally without referencing the documents.\n"
+                "4. Keep your answers concise and to the point.\n"
+                "5. Start your response directly with the answer.\n\n"
+                "Assistant:"
+            )
+        else:
+            # For conversational questions with no relevant document context
+            prompt = (
+                "You are a helpful assistant. You have the following conversation history.\n\n"
+                f"Conversation:\n{conversation_text}"
+                "Please answer the user's latest question based on the conversation history.\n\n"
+                "Guidelines:\n"
+                "1. Respond naturally as a helpful assistant.\n"
+                "2. If the question requires specific knowledge that you don't have, politely say so.\n"
+                "3. Keep your answers concise and to the point.\n"
+                "4. Start your response directly with the answer.\n\n"
+                "Assistant:"
+            )
 
         if stream:
             # Return a generator that yields response chunks

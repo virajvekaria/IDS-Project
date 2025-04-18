@@ -30,7 +30,7 @@ USE_HYBRID_SEARCH = True  # Enable hybrid search for better results
 INDEX_TYPE = "flat"  # "flat" or "ivf" - flat is better for smaller datasets
 
 # LLM settings
-DEFAULT_LLM_MODEL = "deepseek-r1:7b"  # Default Ollama model
+DEFAULT_LLM_MODEL = "llama3:8b"  # Default Ollama model
 
 # API settings
 API_HOST = "0.0.0.0"

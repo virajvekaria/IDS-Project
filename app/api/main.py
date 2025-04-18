@@ -8,7 +8,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.models.database import Base, engine
-from app.api.routes import documents, search, conversations, indexes, frontend
+from app.api.routes import (
+    documents,
+    search,
+    conversations,
+    indexes,
+    frontend,
+    react_api,
+)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -38,6 +45,7 @@ app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(conversations.router)
 app.include_router(indexes.router)
+app.include_router(react_api.router)
 app.include_router(frontend.router)
 
 

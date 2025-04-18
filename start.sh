@@ -18,9 +18,9 @@ if ! curl -s http://localhost:11434/api/tags > /dev/null; then
     sleep 5
 fi
 
-# Check if the deepseek model is available
-if ! ollama list | grep -q "deepseek-r1:7b"; then
-    echo "The deepseek-r1:7b model is not available. Please run ./setup.sh first."
+# Check if the llama3 model is available
+if ! ollama list | grep -q "llama3"; then
+    echo "The llama3 model is not available. Please run 'ollama pull llama3' first."
     exit 1
 fi
 
