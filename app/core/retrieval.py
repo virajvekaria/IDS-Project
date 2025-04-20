@@ -493,7 +493,7 @@ class DocumentRetriever:
                 "You are a helpful assistant. You have the following conversation history and context.\n\n"
                 f"Conversation:\n{conversation_text}"
                 f"Relevant Document Chunks:\n{context_text}"
-                "Please answer the user's latest question based on the conversation history and document context.\n\n"
+                "Please answer the user's latest question according to the document context.\n\n"
                 "Guidelines:\n"
                 "1. IMPORTANT: You MUST cite page numbers when you are using information from the documents.\n"
                 "2. When citing, use the format (Page X) immediately after the information from that page.\n"
