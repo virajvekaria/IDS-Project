@@ -22,12 +22,14 @@ for dir_path in [DOCUMENTS_DIR, PROCESSED_DIR, INDEXES_DIR]:
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR}/diss.db")
 
 # Vector store settings
-DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # Updated to better model
+DEFAULT_EMBEDDING_MODEL = (
+    "sentence-transformers/all-mpnet-base-v2"  # Updated to better model
+)
 DEFAULT_CHUNK_SIZE = 1000  # Increased for better context
 DEFAULT_CHUNK_OVERLAP = 200  # Increased for better context continuity
 DEFAULT_VECTOR_WEIGHT = 0.7
 USE_HYBRID_SEARCH = True  # Enable hybrid search for better results
-INDEX_TYPE = "flat"  # "flat" or "ivf" - flat is better for smaller datasets
+INDEX_TYPE = "hnsw"  # "flat", "ivf", or "hnsw" - flat for small datasets, hnsw for best performance
 
 # LLM settings
 DEFAULT_LLM_MODEL = "llama3"  # Default Ollama model

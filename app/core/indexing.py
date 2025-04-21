@@ -39,7 +39,7 @@ class DocumentIndexer:
 
         Args:
             embedding_model: Name of the SentenceTransformer model to use
-            index_type: Type of FAISS index to create ('flat' or 'ivf')
+            index_type: Type of FAISS index to create ('flat', 'ivf', or 'hnsw')
             use_hybrid: Whether to use hybrid search (vector + keyword)
         """
         self.embedding_model = embedding_model
@@ -142,7 +142,7 @@ class DocumentIndexer:
 
         Args:
             embeddings: Array of embeddings
-            index_type: Type of FAISS index to create ('flat' or 'ivf')
+            index_type: Type of FAISS index to create ('flat', 'ivf', or 'hnsw')
 
         Returns:
             FAISS index
@@ -162,6 +162,22 @@ class DocumentIndexer:
             index = faiss.IndexIVFFlat(quantizer, embedding_dim, n_clusters)
             # Train the index
             index.train(embeddings)
+        elif index_type == "hnsw":
+            # HNSW index - hierarchical navigable small world graph
+            # Excellent performance for approximate nearest neighbor search
+            M = 16  # Number of connections per layer (default: 16)
+            ef_construction = 200  # Controls index quality (higher = better but slower)
+
+            # Create HNSW index
+            index = faiss.IndexHNSWFlat(embedding_dim, M)
+            # Set construction-time parameters
+            index.hnsw.efConstruction = ef_construction
+            # Set search-time parameters (can be adjusted at search time too)
+            index.hnsw.efSearch = 128
+
+            logger.info(
+                f"Created HNSW index with M={M}, efConstruction={ef_construction}"
+            )
         else:
             raise ValueError(f"Unknown index type: {index_type}")
 

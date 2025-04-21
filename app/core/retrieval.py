@@ -12,7 +12,7 @@ from typing import List, Dict, Tuple, Any, Optional
 import faiss
 import numpy as np
 import torch
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import SentenceTransformer
 from scipy.sparse import load_npz
 from sklearn.feature_extraction.text import TfidfVectorizer
 import ollama
@@ -102,6 +102,14 @@ class DocumentRetriever:
             FAISS index
         """
         index = faiss.read_index(index_path)
+
+        # Optimize HNSW parameters if it's an HNSW index
+        if isinstance(index, faiss.IndexHNSWFlat):
+            # Set efSearch parameter for better search quality
+            # Higher values give more accurate results but slower search
+            index.hnsw.efSearch = 128
+            logger.info(f"Loaded HNSW index and set efSearch to 128")
+
         return index
 
     def load_metadata(self, metadata_path: str) -> List[Dict]:
@@ -237,7 +245,24 @@ class DocumentRetriever:
 
         # Vector search
         vector_k = min(top_k * 2, vector_index.ntotal)  # Get more results for reranking
-        vector_distances, vector_indices = vector_index.search(query_emb, vector_k)
+
+        # If using HNSW index, temporarily increase efSearch for better recall
+        if isinstance(vector_index, faiss.IndexHNSWFlat):
+            original_ef_search = vector_index.hnsw.efSearch
+            # Increase efSearch for this query to get better recall
+            vector_index.hnsw.efSearch = max(original_ef_search, 256)
+            logger.info(
+                f"Temporarily increased HNSW efSearch to {vector_index.hnsw.efSearch} for better recall"
+            )
+
+            # Perform search
+            vector_distances, vector_indices = vector_index.search(query_emb, vector_k)
+
+            # Restore original efSearch
+            vector_index.hnsw.efSearch = original_ef_search
+        else:
+            # Standard search for other index types
+            vector_distances, vector_indices = vector_index.search(query_emb, vector_k)
 
         # Convert to list of (index, score) tuples
         # Note: FAISS returns L2 distances, so smaller is better
@@ -424,7 +449,24 @@ class DocumentRetriever:
             # Vector-only search
             try:
                 query_emb = self.embedder.encode([query], convert_to_numpy=True)
-                distances, indices = vector_index.search(query_emb, top_k)
+
+                # If using HNSW index, temporarily increase efSearch for better recall
+                if isinstance(vector_index, faiss.IndexHNSWFlat):
+                    original_ef_search = vector_index.hnsw.efSearch
+                    # Increase efSearch for this query to get better recall
+                    vector_index.hnsw.efSearch = max(original_ef_search, 256)
+                    logger.info(
+                        f"Temporarily increased HNSW efSearch to {vector_index.hnsw.efSearch} for better recall"
+                    )
+
+                    # Perform search
+                    distances, indices = vector_index.search(query_emb, top_k)
+
+                    # Restore original efSearch
+                    vector_index.hnsw.efSearch = original_ef_search
+                else:
+                    # Standard search for other index types
+                    distances, indices = vector_index.search(query_emb, top_k)
             except Exception as e:
                 logger.warning(
                     f"Error during vector search with {self.device}, falling back to CPU: {e}"
@@ -452,15 +494,22 @@ class DocumentRetriever:
         for doc in retrieved_docs:
             context_text += f"(Page {doc['page_number']}): {doc['text']}\n\n"
 
+        # Check if there's any conversation history
+        has_conversation_history = len(conversation_history) > 0
+
         # Convert conversation_history to a user/assistant style text
         conversation_text = ""
-        for msg in conversation_history:
-            role = msg["role"]
-            content = msg["content"]
-            conversation_text += f"{role.capitalize()}: {content}\n\n"
+        if has_conversation_history:
+            for msg in conversation_history:
+                role = msg["role"]
+                content = msg["content"]
+                conversation_text += f"{role.capitalize()}: {content}\n\n"
 
-        # Add the new user input
-        conversation_text += f"User: {query}\n\n"
+            # Add the new user input with conversation context
+            conversation_text += f"User: {query}\n\n"
+        else:
+            # Just the current query without conversation context
+            conversation_text = f"User: {query}\n\n"
 
         # 5) Generate answer
         # Check if there are any relevant documents
@@ -489,34 +538,64 @@ class DocumentRetriever:
 
         # For document-related queries or when we have relevant docs and it's not a simple greeting
         if has_relevant_docs and not simple_conversational:
-            prompt = (
-                "You are a helpful assistant. You have the following conversation history and context.\n\n"
-                f"Conversation:\n{conversation_text}"
-                f"Relevant Document Chunks:\n{context_text}"
-                "Please answer the user's latest question according to the document context.\n\n"
-                "Guidelines:\n"
-                "1. IMPORTANT: You MUST cite page numbers when you are using information from the documents.\n"
-                "2. When citing, use the format (Page X) immediately after the information from that page.\n"
-                "3. Be very explicit with citations - every fact or piece of information from the documents needs a citation.\n"
-                "4. If the question is conversational and not about the documents, respond naturally without citations.\n"
-                "5. For simple greetings or conversational exchanges, respond naturally without any citations.\n"
-                "6. Keep your answers concise and to the point.\n"
-                "7. Start your response directly with the answer.\n\n"
-                "Assistant:"
-            )
+            if has_conversation_history:
+                prompt = (
+                    "You are a helpful assistant. You have the following conversation history and document context.\n\n"
+                    f"Conversation:\n{conversation_text}"
+                    f"Relevant Document Chunks:\n{context_text}"
+                    "Please answer the user's latest question according to the document context.\n\n"
+                    "Guidelines:\n"
+                    "1. IMPORTANT: You MUST cite page numbers when you are using information from the documents.\n"
+                    "2. When citing, use the format (Page X) immediately after the information from that page.\n"
+                    "3. Be very explicit with citations - every fact or piece of information from the documents needs a citation.\n"
+                    "4. If the question is conversational and not about the documents, respond naturally without citations.\n"
+                    "5. For simple greetings or conversational exchanges, respond naturally without any citations.\n"
+                    "6. Keep your answers concise and to the point.\n"
+                    "7. Start your response directly with the answer.\n\n"
+                    "Assistant:"
+                )
+            else:
+                # No conversation history, just the current query and document context
+                prompt = (
+                    "You are a helpful assistant answering a question using document content.\n\n"
+                    f"User Question: {query}\n\n"
+                    f"Relevant Document Chunks:\n{context_text}"
+                    "Please answer the user's question according to the document context.\n\n"
+                    "Guidelines:\n"
+                    "1. IMPORTANT: You MUST cite page numbers when you are using information from the documents.\n"
+                    "2. When citing, use the format (Page X) immediately after the information from that page.\n"
+                    "3. Be very explicit with citations - every fact or piece of information from the documents needs a citation.\n"
+                    "4. Keep your answers concise and to the point.\n"
+                    "5. Start your response directly with the answer.\n\n"
+                    "Assistant:"
+                )
         else:
             # For conversational questions with no relevant document context
-            prompt = (
-                "You are a helpful assistant. You have the following conversation history.\n\n"
-                f"Conversation:\n{conversation_text}"
-                "Please answer the user's latest question based on the conversation history.\n\n"
-                "Guidelines:\n"
-                "1. Respond naturally as a helpful assistant.\n"
-                "2. If the question requires specific knowledge that you don't have, politely say so.\n"
-                "3. Keep your answers concise and to the point.\n"
-                "4. Start your response directly with the answer.\n\n"
-                "Assistant:"
-            )
+            if has_conversation_history:
+                prompt = (
+                    "You are a helpful assistant. You have the following conversation history.\n\n"
+                    f"Conversation:\n{conversation_text}"
+                    "Please answer the user's latest question based on the conversation history.\n\n"
+                    "Guidelines:\n"
+                    "1. Respond naturally as a helpful assistant.\n"
+                    "2. If the question requires specific knowledge that you don't have, politely say so.\n"
+                    "3. Keep your answers concise and to the point.\n"
+                    "4. Start your response directly with the answer.\n\n"
+                    "Assistant:"
+                )
+            else:
+                # No conversation history, just a simple conversational query
+                prompt = (
+                    "You are a helpful assistant.\n\n"
+                    f"User Question: {query}\n\n"
+                    "Please answer the user's question.\n\n"
+                    "Guidelines:\n"
+                    "1. Respond naturally as a helpful assistant.\n"
+                    "2. If the question requires specific knowledge that you don't have, politely say so.\n"
+                    "3. Keep your answers concise and to the point.\n"
+                    "4. Start your response directly with the answer.\n\n"
+                    "Assistant:"
+                )
 
         if stream:
             # Return a generator that yields response chunks
@@ -610,7 +689,24 @@ class DocumentRetriever:
             # Vector-only search
             try:
                 query_emb = self.embedder.encode([query], convert_to_numpy=True)
-                distances, indices = vector_index.search(query_emb, top_k)
+
+                # If using HNSW index, temporarily increase efSearch for better recall
+                if isinstance(vector_index, faiss.IndexHNSWFlat):
+                    original_ef_search = vector_index.hnsw.efSearch
+                    # Increase efSearch for this query to get better recall
+                    vector_index.hnsw.efSearch = max(original_ef_search, 256)
+                    logger.info(
+                        f"Temporarily increased HNSW efSearch to {vector_index.hnsw.efSearch} for better recall"
+                    )
+
+                    # Perform search
+                    distances, indices = vector_index.search(query_emb, top_k)
+
+                    # Restore original efSearch
+                    vector_index.hnsw.efSearch = original_ef_search
+                else:
+                    # Standard search for other index types
+                    distances, indices = vector_index.search(query_emb, top_k)
             except Exception as e:
                 logger.warning(
                     f"Error during vector search with {self.device}, falling back to CPU: {e}"
